@@ -1,10 +1,6 @@
-// background.js (MV3 service worker)
-
 const API_BASE = "https://api-v2.etf2l.org";
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 часов
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
-// Небольшая очередь, чтобы не упираться в лимиты.
-// Small request queue to avoid hitting API rate limits.
 const CONCURRENCY = 3;
 const queue = [];
 let inFlight = 0;
@@ -32,11 +28,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: false, error: String(e) });
   });
 
-  // Важно: async response
   return true;
 });
-
-// --------- Cache helpers ---------
 
 async function cacheGet(key) {
   const data = await chrome.storage.local.get(key);
@@ -46,8 +39,6 @@ async function cacheGet(key) {
 async function cacheSet(key, value) {
   await chrome.storage.local.set({ [key]: value });
 }
-
-// --------- Queue helpers ---------
 
 function enqueue(fn) {
   return new Promise((resolve, reject) => {
@@ -65,13 +56,10 @@ function pumpQueue() {
       .catch(job.reject)
       .finally(() => {
         inFlight--;
-        // небольшая пауза между пачками
         setTimeout(pumpQueue, 120);
       });
   }
 }
-
-// --------- ETF2L lookup ---------
 
 async function getBadgeForSteamId(steamId64, lobbyMode) {
   const cacheKey = `etf2l:${steamId64}:${lobbyMode || "unknown"}`;
@@ -84,18 +72,15 @@ async function getBadgeForSteamId(steamId64, lobbyMode) {
     const results = await fetchPlayerResults(steamId64, 20);
     const best = pickBestDivisionFromResults(results, lobbyMode);
     return best ? `ETF2L: ${best}` : "";
-
   });
 
   await cacheSet(cacheKey, { ts: now, badge });
   return badge;
 }
 
-// API: /player/{id}/results with limit/page query params.
 async function fetchPlayerResults(steamId64, limit = 20) {
   const url = new URL(`${API_BASE}/player/${encodeURIComponent(steamId64)}/results`);
   url.searchParams.set("limit", String(limit));
-  // url.searchParams.set("page", "1");
 
   const res = await fetch(url.toString(), {
     method: "GET",
@@ -103,7 +88,6 @@ async function fetchPlayerResults(steamId64, limit = 20) {
   });
 
   if (!res.ok) {
-    // 404 значит "игрок не найден" — просто не показываем бейдж
     return null;
   }
 
@@ -111,16 +95,7 @@ async function fetchPlayerResults(steamId64, limit = 20) {
   return json;
 }
 
-// --------- Division heuristics ---------
-
 function pickBestDivisionFromResults(apiResponse, lobbyMode) {
-  // Тут главная неопределённость: точные поля в ответе.
-  // Поэтому сделано “бережно”: пытаемся достать из ожидаемых мест,
-  // иначе парсим по названию соревнования.
-  //
-  // Тебе почти наверняка придётся 1 раз посмотреть в DevTools -> Console:
-  // console.log(apiResponse)
-  // и поправить getCompetitionName()/getTeamType()/extractDivisionDirect().
   if (!apiResponse) return null;
 
   const items = extractResultItems(apiResponse);
@@ -128,11 +103,9 @@ function pickBestDivisionFromResults(apiResponse, lobbyMode) {
 
   const mode = (lobbyMode || "").toLowerCase();
 
-  // 1) сначала пробуем найти результаты под режим лобби (6v6 vs HL)
   const filtered = items.filter((r) => matchesMode(r, mode));
   const candidates = filtered.length ? filtered : items;
 
-  // 2) берём самый свежий, где удаётся понять дивизион
   for (const r of candidates) {
     const div =
       extractDivisionDirect(r) ||
@@ -144,12 +117,10 @@ function pickBestDivisionFromResults(apiResponse, lobbyMode) {
 }
 
 function extractResultItems(apiResponse) {
-  // Часто в API это что-то вроде { results: { data: [...] } } или { data: [...] }
   if (!apiResponse) return [];
 
   if (Array.isArray(apiResponse)) return apiResponse;
 
-  // пробуем распространённые варианты
   const paths = [
     ["results", "data"],
     ["results"],
@@ -177,7 +148,6 @@ function matchesMode(resultItem, mode) {
 }
 
 function getCompetitionName(resultItem) {
-  // Попробуй в реальном JSON: где лежит название?
   return (
     resultItem?.competition?.name ||
     resultItem?.competition?.description ||
@@ -219,11 +189,9 @@ function normalizeDivisionValue(v) {
   return null;
 }
 
-
 function parseDivisionFromText(text) {
   const t = text.toLowerCase();
 
-  // HL / 6v6 встречаются форматы: "Premiership", "Division 1", "Division 2", "Mid", "Low", "Open"
   if (t.includes("prem")) return "PREM";
   if (t.includes("division 1") || t.includes("div 1") || t.includes("div1")) return "DIV1";
   if (t.includes("division 2") || t.includes("div 2") || t.includes("div2")) return "DIV2";
