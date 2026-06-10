@@ -17,6 +17,10 @@ This is an unofficial community project. It is not affiliated with TF2Center or 
 
 ---
 
+## Screenshot
+
+![TF2Center ETF2L division badges](screenshots/lobby-badges.png)
+
 ## Supported pages
 
 The extension runs only on TF2Center lobby pages:
