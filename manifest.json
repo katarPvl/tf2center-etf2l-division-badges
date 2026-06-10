@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "TF2Center ETF2L Division Badges (API v2)",
+  "version": "0.1.0",
+  "description": "Shows ETF2L division badges next to players on TF2Center lobbies (uses ETF2L API v2).",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://api-v2.etf2l.org/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+  {
+    "matches": [
+      "*://tf2center.com/lobbies/*",
+      "*://www.tf2center.com/lobbies/*"
+    ],
+    "exclude_matches": [
+      "*://tf2center.com/lobbies",
+      "*://tf2center.com/lobbies/",
+      "*://www.tf2center.com/lobbies",
+      "*://www.tf2center.com/lobbies/"
+    ],
+    "js": ["contentScript.js"],
+    "css": ["styles.css"],
+    "run_at": "document_idle"
+  }
+]
+
+
+}

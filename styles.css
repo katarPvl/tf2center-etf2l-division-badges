@@ -1,0 +1,20 @@
+.etf2l-badge {
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: #fff;
+  vertical-align: middle;
+  display: none;
+  white-space: nowrap;
+}
+
+.etf2l-badge[data-level="prem"] { border-color: rgba(255, 215, 0, 0.6); }
+.etf2l-badge[data-level="div1"] { border-color: rgba(190, 190, 255, 0.6); }
+.etf2l-badge[data-level="div2"] { border-color: rgba(180, 120, 255, 0.6); }
+.etf2l-badge[data-level="mid"]  { border-color: rgba(80, 170, 255, 0.6); }
+.etf2l-badge[data-level="low"]  { border-color: rgba(120, 255, 120, 0.6); }
+.etf2l-badge[data-level="open"] { border-color: rgba(200, 200, 200, 0.6); }

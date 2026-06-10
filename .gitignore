@@ -1,0 +1,20 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Extension packages / private keys
+*.crx
+*.pem
+*.zip
+
+# Future build folders, if the project ever gets a build step
+node_modules/
+dist/
+build/
