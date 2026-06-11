@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TF2Center ETF2L Division Badges (API v2)",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Shows ETF2L division badges next to players on TF2Center lobbies (uses ETF2L API v2).",
   "permissions": ["storage"],
   "host_permissions": [

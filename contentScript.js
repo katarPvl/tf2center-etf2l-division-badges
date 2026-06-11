@@ -47,30 +47,13 @@ function scheduleScan(delay = SCAN_DEBOUNCE_MS) {
   scanTimer = setTimeout(scanAndRender, delay);
 }
 
-function detectLobbyMode() {
-  // The lobby header h1 holds the game mode (the first h1 on the page is
-  // empty). Body text is a last resort: chat messages can mention a mode.
-  const sources = [
-    document.querySelector(".lobbyHeaderInfo h1")?.textContent,
-    document.title,
-    document.body?.innerText
-  ];
-  for (const src of sources) {
-    const t = (src || "").toLowerCase();
-    if (t.includes("highlander")) return "highlander";
-    if (t.includes("6v6") || t.includes("6on6")) return "6v6";
-  }
-  return "";
-}
-
 async function scanAndRender() {
-  const lobbyMode = detectLobbyMode();
   const players = findPlayers();
   if (!players.length) return;
 
   const steamIds = [...new Set(players.map((p) => p.steamId64))].filter(Boolean);
 
-  const key = `${lobbyMode}:${steamIds.join(",")}`;
+  const key = steamIds.join(",");
   if (key === lastSentKey) {
     // Roster unchanged — just restore badges that a page re-render wiped.
     for (const p of players) {
@@ -86,7 +69,7 @@ async function scanAndRender() {
 
   let resp = null;
   try {
-    resp = await chrome.runtime.sendMessage({ type: "ETF2L_LOOKUP", steamIds, lobbyMode });
+    resp = await chrome.runtime.sendMessage({ type: "ETF2L_LOOKUP", steamIds });
   } catch (e) {
     console.warn("ETF2L lookup failed:", e);
   }

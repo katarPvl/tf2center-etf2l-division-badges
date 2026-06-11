@@ -1,8 +1,8 @@
 const API_BASE = "https://api-v2.etf2l.org";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-// Bumped from "etf2l:" when badge semantics changed to career-best division.
-const CACHE_PREFIX = "etf2l2:";
-const LEGACY_CACHE_PREFIX = "etf2l:";
+// Bumped whenever badge semantics change, so stale values don't survive updates.
+const CACHE_PREFIX = "etf2l3:";
+const LEGACY_CACHE_PREFIXES = ["etf2l:", "etf2l2:"];
 
 const CONCURRENCY = 3;
 const QUEUE_STEP_MS = 120;
@@ -20,7 +20,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.type !== "ETF2L_LOOKUP") return;
 
   (async () => {
-    const { steamIds, lobbyMode } = msg;
+    const { steamIds } = msg;
     if (!Array.isArray(steamIds) || steamIds.length === 0) {
       sendResponse({ ok: true, result: {} });
       return;
@@ -30,7 +30,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     await Promise.all(
       steamIds.map(async (sid) => {
         try {
-          result[sid] = { ok: true, badge: await getBadgeForSteamId(sid, lobbyMode) };
+          result[sid] = { ok: true, badge: await getBadgeForSteamId(sid) };
         } catch (e) {
           console.warn(`ETF2L lookup failed for ${sid}:`, e);
           result[sid] = { ok: false };
@@ -49,15 +49,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 pruneCache();
 
-async function getBadgeForSteamId(steamId64, lobbyMode) {
-  const mode = (lobbyMode || "").toLowerCase();
-  const cacheKey = `${CACHE_PREFIX}${steamId64}:${mode || "any"}`;
+async function getBadgeForSteamId(steamId64) {
+  const cacheKey = `${CACHE_PREFIX}${steamId64}`;
 
   const cached = await cacheGet(cacheKey);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.badge;
 
   const player = await dedupe(steamId64, () => enqueue(() => fetchPlayer(steamId64)));
-  const badge = player ? pickBestDivision(player, mode) || "" : "";
+  const badge = player ? pickBestDivision(player) || "" : "";
 
   // Only reached on success: fetch errors throw and are never cached.
   await cacheSet(cacheKey, { ts: Date.now(), badge });
@@ -93,43 +92,29 @@ async function fetchPlayer(steamId64) {
   return json?.player ?? null;
 }
 
-// Career-best division: across all the player's teams, pick the entry with the
-// lowest tier (0 = Premiership). Entries matching the lobby mode are preferred,
-// and official seasons are preferred over cups.
-function pickBestDivision(player, mode) {
+// Career-best division across ALL game modes: the entry with the lowest tier
+// (0 = Premiership) among official league seasons. Cups (Fun Cup, 1 Day Cup,
+// etc.) are ignored — they often run with mixed-level teams and would inflate
+// the badge.
+function pickBestDivision(player) {
   const teams = Array.isArray(player?.teams) ? player.teams : [];
 
-  const entries = [];
+  let best = null;
   for (const team of teams) {
     for (const comp of Object.values(team?.competitions || {})) {
       const div = comp?.division;
       if (!div || div.tier == null || !div.name) continue;
-      entries.push({
-        tier: Number(div.tier),
-        name: String(div.name),
-        category: String(comp.category || team.type || "").toLowerCase()
-      });
+
+      const category = String(comp.category || "").toLowerCase();
+      if (!category.includes("season")) continue;
+
+      if (!best || Number(div.tier) < best.tier) {
+        best = { tier: Number(div.tier), name: String(div.name) };
+      }
     }
   }
-  if (!entries.length) return null;
 
-  let pool = entries;
-  if (mode) {
-    const sameMode = pool.filter((e) => matchesMode(e.category, mode));
-    if (sameMode.length) pool = sameMode;
-  }
-
-  const seasons = pool.filter((e) => e.category.includes("season"));
-  if (seasons.length) pool = seasons;
-
-  pool.sort((a, b) => a.tier - b.tier);
-  return normalizeDivision(pool[0].name);
-}
-
-function matchesMode(category, mode) {
-  if (mode.includes("high")) return category.includes("highlander");
-  if (mode.includes("6")) return category.includes("6v6") || category.includes("6on6");
-  return true;
+  return best ? normalizeDivision(best.name) : null;
 }
 
 function normalizeDivision(raw) {
@@ -164,9 +149,8 @@ async function pruneCache() {
     const all = await chrome.storage.local.get(null);
     const now = Date.now();
     const stale = Object.keys(all).filter((k) => {
-      if (k.startsWith(LEGACY_CACHE_PREFIX)) return true;
       if (k.startsWith(CACHE_PREFIX)) return now - (all[k]?.ts ?? 0) >= CACHE_TTL_MS;
-      return false;
+      return LEGACY_CACHE_PREFIXES.some((p) => k.startsWith(p));
     });
     if (stale.length) await chrome.storage.local.remove(stale);
   } catch (e) {

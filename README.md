@@ -9,7 +9,7 @@ This is an unofficial community project. It is not affiliated with TF2Center or 
 ## Features
 
 * Shows ETF2L division badges on TF2Center lobby pages.
-* The badge is the player's career-best ETF2L division (the highest tier they ever played in), preferring the lobby's game mode (6v6 / Highlander) and official seasons over cups.
+* The badge is the player's career-best ETF2L division: the highest tier they ever played in **any** game mode (6v6, Highlander, ...). Only official league seasons count; cups are ignored.
 * Detects players by TF2Center profile links.
 * Extracts SteamID64 from player profile URLs.
 * Uses ETF2L API v2 (`/player/{steamid64}`).

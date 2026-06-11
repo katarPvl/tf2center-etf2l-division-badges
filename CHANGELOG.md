@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-11
+
+### Changed
+
+- The badge now shows the player's highest ETF2L division across **all game
+  modes**: a 6v6 lobby and a Highlander lobby show the same badge for the same
+  player. Previously the badge was filtered by the lobby's game mode.
+- Only official league seasons (6v6 Season, Highlander Season, ...) are counted
+  towards the badge. Cups (Fun Cup, 1 Day Cup, ...) are ignored: they often run
+  with mixed-level teams and inflated the badge.
+- Lobby game-mode detection was removed entirely — it is no longer needed.
+- Cached results from previous versions are invalidated and cleaned up on
+  update.
+
 ## [0.2.0] - 2026-06-11
 
 ### Changed
