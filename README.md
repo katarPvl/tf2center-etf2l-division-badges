@@ -9,10 +9,11 @@ This is an unofficial community project. It is not affiliated with TF2Center or 
 ## Features
 
 * Shows ETF2L division badges on TF2Center lobby pages.
+* The badge is the player's career-best ETF2L division (the highest tier they ever played in), preferring the lobby's game mode (6v6 / Highlander) and official seasons over cups.
 * Detects players by TF2Center profile links.
 * Extracts SteamID64 from player profile URLs.
-* Uses ETF2L API v2.
-* Caches lookup results locally to reduce API requests.
+* Uses ETF2L API v2 (`/player/{steamid64}`).
+* Caches lookup results locally for 6 hours to reduce API requests. Errors and rate limits are never cached.
 * Adds small colored badges next to player names.
 
 ---
@@ -20,6 +21,21 @@ This is an unofficial community project. It is not affiliated with TF2Center or 
 ## Screenshot
 
 ![TF2Center ETF2L division badges](screenshots/lobby-badges.png)
+
+## Badge levels
+
+| Badge | ETF2L division | Border color |
+|-------|----------------|--------------|
+| PREM | Premiership | gold |
+| HIGH / DIV1 | High / Division 1 | lavender |
+| DIV2 | Division 2 | purple |
+| DIV3 | Division 3 | orange |
+| DIV4 | Division 4 | red |
+| MID | Mid | blue |
+| LOW | Low | green |
+| OPEN | Open | gray |
+
+Players without ETF2L history get no badge.
 
 ## Supported pages
 
@@ -41,6 +57,7 @@ manifest.json      Extension manifest, permissions and content script config
 background.js      ETF2L API lookup, cache and background message handler
 contentScript.js   TF2Center page scanner and badge renderer
 styles.css         Badge styles
+CHANGELOG.md       Release history
 ```
 
 ---
@@ -264,6 +281,14 @@ https://tf2center.com/lobbies/1234567
 This extension uses only local browser storage and ETF2L API requests.
 
 It does not require your Steam password, TF2Center password, ETF2L password, or any API key.
+
+Lookup results are cached locally for 6 hours; errors and API rate limits are never cached.
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

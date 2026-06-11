@@ -1,82 +1,121 @@
 const BADGE_ATTR = "data-etf2l-badge";
 const SCAN_DEBOUNCE_MS = 500;
+const RETRY_DELAY_MS = 30 * 1000;
+const CHAT_SELECTOR = "#chat, .chat, .chatbox, .messages";
+const PROFILE_LINK_SELECTOR = 'a[href*="/profile/"], a[href*="steamcommunity.com/profiles/"]';
+const KNOWN_LEVELS = new Set(["prem", "high", "div1", "div2", "div3", "div4", "mid", "low", "open"]);
 
 let scanTimer = null;
 let lastSentKey = "";
+// Last known badge text per steamId. TF2Center (Apache Wicket) re-renders DOM
+// chunks over WebSocket, wiping our badges; this lets us restore them without
+// re-querying the API.
+const badgeTexts = new Map();
 
-(() => {
-  if (!/^\/lobbies\/\d+\/?$/.test(location.pathname)) {
-    console.debug("[ETF2L] Not a lobby page, skipping:", location.pathname);
-    return;
+if (/^\/lobbies\/\d+\/?$/.test(location.pathname)) {
+  installObserver();
+  scheduleScan();
+} else {
+  console.debug("[ETF2L] Not a lobby page, skipping:", location.pathname);
+}
+
+function installObserver() {
+  const obs = new MutationObserver((mutations) => {
+    if (mutations.some(isRelevantMutation)) scheduleScan();
+  });
+  obs.observe(document.documentElement, { childList: true, subtree: true });
+}
+
+// Skip mutations caused by our own badges and by the chat — otherwise every
+// chat message (and every badge we insert) re-triggers a scan.
+function isRelevantMutation(m) {
+  const el = m.target.nodeType === Node.ELEMENT_NODE ? m.target : m.target.parentElement;
+  if (!el || el.closest(`.etf2l-badge, ${CHAT_SELECTOR}`)) return false;
+
+  const nodes = [...m.addedNodes, ...m.removedNodes];
+  if (
+    nodes.length &&
+    nodes.every((n) => n.nodeType === Node.ELEMENT_NODE && n.classList.contains("etf2l-badge"))
+  ) {
+    return false;
   }
+  return true;
+}
 
-  const BADGE_ATTR = "data-etf2l-badge";
-  const SCAN_DEBOUNCE_MS = 500;
-
-  let scanTimer = null;
-  let lastSentKey = "";
-
-  function main() {
-    installObserver();
-    scheduleScan();
-  }
-
-  function installObserver() {
-    const obs = new MutationObserver(() => scheduleScan());
-    obs.observe(document.documentElement, { childList: true, subtree: true });
-  }
-
-  function scheduleScan() {
-    clearTimeout(scanTimer);
-    scanTimer = setTimeout(scanAndRender, SCAN_DEBOUNCE_MS);
-  }
-
-  main();
-})();
+function scheduleScan(delay = SCAN_DEBOUNCE_MS) {
+  clearTimeout(scanTimer);
+  scanTimer = setTimeout(scanAndRender, delay);
+}
 
 function detectLobbyMode() {
-  const text = document.body?.innerText?.toLowerCase() || "";
-  if (text.includes("highlander")) return "highlander";
-  if (text.includes("6v6")) return "6v6";
+  // The lobby header h1 holds the game mode (the first h1 on the page is
+  // empty). Body text is a last resort: chat messages can mention a mode.
+  const sources = [
+    document.querySelector(".lobbyHeaderInfo h1")?.textContent,
+    document.title,
+    document.body?.innerText
+  ];
+  for (const src of sources) {
+    const t = (src || "").toLowerCase();
+    if (t.includes("highlander")) return "highlander";
+    if (t.includes("6v6") || t.includes("6on6")) return "6v6";
+  }
   return "";
 }
 
 async function scanAndRender() {
   const lobbyMode = detectLobbyMode();
   const players = findPlayers();
-
   if (!players.length) return;
 
   const steamIds = [...new Set(players.map((p) => p.steamId64))].filter(Boolean);
 
   const key = `${lobbyMode}:${steamIds.join(",")}`;
   if (key === lastSentKey) {
-    for (const p of players) ensureBadgeNode(p);
+    // Roster unchanged — just restore badges that a page re-render wiped.
+    for (const p of players) {
+      const node = ensureBadgeNode(p);
+      const known = badgeTexts.get(p.steamId64);
+      if (known !== undefined && node.textContent !== known) setBadge(node, known);
+    }
     return;
   }
   lastSentKey = key;
 
-  for (const p of players) {
-    const node = ensureBadgeNode(p);
-    setBadge(node, "…");
+  for (const p of players) setBadge(ensureBadgeNode(p), "…");
+
+  let resp = null;
+  try {
+    resp = await chrome.runtime.sendMessage({ type: "ETF2L_LOOKUP", steamIds, lobbyMode });
+  } catch (e) {
+    console.warn("ETF2L lookup failed:", e);
   }
 
-  const resp = await chrome.runtime.sendMessage({
-    type: "ETF2L_LOOKUP",
-    steamIds,
-    lobbyMode
-  });
-
   if (!resp?.ok) {
-    console.warn("ETF2L lookup failed:", resp?.error);
+    if (resp) console.warn("ETF2L lookup failed:", resp.error);
+    // Forget this roster so the next scan retries instead of short-circuiting.
+    lastSentKey = "";
     for (const p of players) setBadge(ensureBadgeNode(p), "");
+    scheduleScan(RETRY_DELAY_MS);
     return;
   }
 
   const map = resp.result || {};
+  let hadErrors = false;
   for (const p of players) {
-    const badgeText = map[p.steamId64] || "";
-    setBadge(ensureBadgeNode(p), badgeText);
+    const entry = map[p.steamId64];
+    if (entry?.ok) {
+      badgeTexts.set(p.steamId64, entry.badge || "");
+      setBadge(ensureBadgeNode(p), entry.badge);
+    } else {
+      hadErrors = true;
+      setBadge(ensureBadgeNode(p), "");
+    }
+  }
+
+  if (hadErrors) {
+    lastSentKey = "";
+    scheduleScan(RETRY_DELAY_MS);
   }
 }
 
@@ -93,29 +132,39 @@ function parseSteamId64FromUrl(url) {
 }
 
 function findPlayers() {
-  const anchors = Array.from(document.querySelectorAll('a[href*="/profile/"], a[href*="tf2center.com/profile/"]'));
+  const anchors = Array.from(document.querySelectorAll(PROFILE_LINK_SELECTOR));
   const map = new Map();
 
   for (const a of anchors) {
-    if (a.closest('#chat, .chat, .chatbox, .messages')) continue;
+    if (a.closest(CHAT_SELECTOR)) continue;
 
     const sid = parseSteamId64FromUrl(a.href || a.getAttribute("href"));
     if (!sid || !sid.startsWith("7656119")) continue;
 
+    // TF2Center wraps each slot in .playerSlot/.lobbySlot; the generic list is
+    // a fallback in case the markup changes.
+    const slot = a.closest(".playerSlot, .lobbySlot");
     const row =
+      slot ||
       a.closest("tr, li, .slot, .lobby-player, .player, .player-row, .team-player, div") ||
       a.parentElement ||
       a;
 
+    // The same player can be linked outside their slot too (e.g. the "Leader"
+    // row of the lobby options) — slot links always win, then longer text.
     const prev = map.get(sid);
     if (!prev) {
-      map.set(sid, { steamId64: sid, anchor: a, row });
+      map.set(sid, { steamId64: sid, anchor: a, row, inSlot: !!slot });
     } else {
       const newText = (a.textContent || "").trim();
       const oldText = (prev.anchor.textContent || "").trim();
-      if (newText.length > oldText.length) {
+      const better =
+        (!!slot && !prev.inSlot) ||
+        (!!slot === prev.inSlot && newText.length > oldText.length);
+      if (better) {
         prev.anchor = a;
         prev.row = row;
+        prev.inSlot = !!slot;
       }
     }
   }
@@ -136,14 +185,15 @@ function ensureBadgeNode(player) {
   const span = document.createElement("span");
   span.className = "etf2l-badge";
   span.setAttribute(BADGE_ATTR, steamId64);
-  span.textContent = "";
 
+  // Prefer the visible name link of THIS player: the row may turn out to be a
+  // shared container that also holds other players' links.
   let target = anchor;
   if (row) {
-    const candidates = Array.from(
-      row.querySelectorAll('a[href*="/profile/"], a[href*="tf2center.com/profile/"]')
+    const candidates = Array.from(scope.querySelectorAll(PROFILE_LINK_SELECTOR)).filter(
+      (a) => parseSteamId64FromUrl(a.href) === steamId64
     );
-    const nameLink = candidates.find(x => (x.textContent || "").trim().length > 0);
+    const nameLink = candidates.find((a) => (a.textContent || "").trim().length > 0);
     if (nameLink) target = nameLink;
   }
 
@@ -153,16 +203,10 @@ function ensureBadgeNode(player) {
 
 function setBadge(node, text) {
   if (!node) return;
-  const t = (text || "").replace(/^ETF2L:\s*/i, "").trim();
+  const t = (text || "").trim();
   node.textContent = t;
   node.style.display = t ? "inline-block" : "none";
 
-  node.dataset.level =
-    t.includes("PREM") ? "prem" :
-    t.includes("DIV1") ? "div1" :
-    t.includes("DIV2") ? "div2" :
-    t.includes("MID") ? "mid" :
-    t.includes("LOW") ? "low" :
-    t.includes("OPEN") ? "open" :
-    "";
+  const level = t.toLowerCase();
+  node.dataset.level = KNOWN_LEVELS.has(level) ? level : "";
 }

@@ -13,8 +13,12 @@
 }
 
 .etf2l-badge[data-level="prem"] { border-color: rgba(255, 215, 0, 0.6); }
+/* High and Division 1 are both tier 1, hence the same color */
+.etf2l-badge[data-level="high"] { border-color: rgba(190, 190, 255, 0.6); }
 .etf2l-badge[data-level="div1"] { border-color: rgba(190, 190, 255, 0.6); }
 .etf2l-badge[data-level="div2"] { border-color: rgba(180, 120, 255, 0.6); }
+.etf2l-badge[data-level="div3"] { border-color: rgba(255, 170, 90, 0.6); }
+.etf2l-badge[data-level="div4"] { border-color: rgba(255, 120, 120, 0.6); }
 .etf2l-badge[data-level="mid"]  { border-color: rgba(80, 170, 255, 0.6); }
 .etf2l-badge[data-level="low"]  { border-color: rgba(120, 255, 120, 0.6); }
 .etf2l-badge[data-level="open"] { border-color: rgba(200, 200, 200, 0.6); }

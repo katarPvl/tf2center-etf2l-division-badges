@@ -1,14 +1,25 @@
 const API_BASE = "https://api-v2.etf2l.org";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+// Bumped from "etf2l:" when badge semantics changed to career-best division.
+const CACHE_PREFIX = "etf2l2:";
+const LEGACY_CACHE_PREFIX = "etf2l:";
 
 const CONCURRENCY = 3;
+const QUEUE_STEP_MS = 120;
+const RATE_LIMIT_FALLBACK_MS = 60 * 1000;
+
 const queue = [];
 let inFlight = 0;
+// Set when the API answers 429; the queue waits until this timestamp.
+let pausedUntil = 0;
+
+// In-flight fetches by steamId, so concurrent lookups share one request.
+const pending = new Map();
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  (async () => {
-    if (!msg || msg.type !== "ETF2L_LOOKUP") return;
+  if (!msg || msg.type !== "ETF2L_LOOKUP") return;
 
+  (async () => {
     const { steamIds, lobbyMode } = msg;
     if (!Array.isArray(steamIds) || steamIds.length === 0) {
       sendResponse({ ok: true, result: {} });
@@ -18,7 +29,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const result = {};
     await Promise.all(
       steamIds.map(async (sid) => {
-        result[sid] = await getBadgeForSteamId(sid, lobbyMode);
+        try {
+          result[sid] = { ok: true, badge: await getBadgeForSteamId(sid, lobbyMode) };
+        } catch (e) {
+          console.warn(`ETF2L lookup failed for ${sid}:`, e);
+          result[sid] = { ok: false };
+        }
       })
     );
 
@@ -31,6 +47,107 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true;
 });
 
+pruneCache();
+
+async function getBadgeForSteamId(steamId64, lobbyMode) {
+  const mode = (lobbyMode || "").toLowerCase();
+  const cacheKey = `${CACHE_PREFIX}${steamId64}:${mode || "any"}`;
+
+  const cached = await cacheGet(cacheKey);
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.badge;
+
+  const player = await dedupe(steamId64, () => enqueue(() => fetchPlayer(steamId64)));
+  const badge = player ? pickBestDivision(player, mode) || "" : "";
+
+  // Only reached on success: fetch errors throw and are never cached.
+  await cacheSet(cacheKey, { ts: Date.now(), badge });
+  return badge;
+}
+
+function dedupe(key, fn) {
+  let p = pending.get(key);
+  if (!p) {
+    p = fn().finally(() => pending.delete(key));
+    pending.set(key, p);
+  }
+  return p;
+}
+
+// Returns the player object, or null if the player is not registered on ETF2L.
+async function fetchPlayer(steamId64) {
+  const res = await fetch(`${API_BASE}/player/${encodeURIComponent(steamId64)}`, {
+    headers: { "Accept": "application/json" }
+  });
+
+  if (res.status === 404) return null;
+
+  if (res.status === 429) {
+    const retryAfter = Number(res.headers.get("Retry-After")) * 1000 || RATE_LIMIT_FALLBACK_MS;
+    pausedUntil = Date.now() + retryAfter;
+    throw new Error("ETF2L API rate limit (429)");
+  }
+
+  if (!res.ok) throw new Error(`ETF2L API HTTP ${res.status}`);
+
+  const json = await res.json();
+  return json?.player ?? null;
+}
+
+// Career-best division: across all the player's teams, pick the entry with the
+// lowest tier (0 = Premiership). Entries matching the lobby mode are preferred,
+// and official seasons are preferred over cups.
+function pickBestDivision(player, mode) {
+  const teams = Array.isArray(player?.teams) ? player.teams : [];
+
+  const entries = [];
+  for (const team of teams) {
+    for (const comp of Object.values(team?.competitions || {})) {
+      const div = comp?.division;
+      if (!div || div.tier == null || !div.name) continue;
+      entries.push({
+        tier: Number(div.tier),
+        name: String(div.name),
+        category: String(comp.category || team.type || "").toLowerCase()
+      });
+    }
+  }
+  if (!entries.length) return null;
+
+  let pool = entries;
+  if (mode) {
+    const sameMode = pool.filter((e) => matchesMode(e.category, mode));
+    if (sameMode.length) pool = sameMode;
+  }
+
+  const seasons = pool.filter((e) => e.category.includes("season"));
+  if (seasons.length) pool = seasons;
+
+  pool.sort((a, b) => a.tier - b.tier);
+  return normalizeDivision(pool[0].name);
+}
+
+function matchesMode(category, mode) {
+  if (mode.includes("high")) return category.includes("highlander");
+  if (mode.includes("6")) return category.includes("6v6") || category.includes("6on6");
+  return true;
+}
+
+function normalizeDivision(raw) {
+  const r = raw.trim().toLowerCase();
+  if (!r) return null;
+
+  if (r.startsWith("prem")) return "PREM";
+  if (r.startsWith("high")) return "HIGH";
+  if (r.startsWith("mid")) return "MID";
+  if (r.startsWith("low")) return "LOW";
+  if (r.startsWith("open")) return "OPEN";
+
+  const m = r.match(/^div(?:ision)?\s*(\d)/);
+  if (m) return `DIV${m[1]}`;
+
+  return raw.toUpperCase().slice(0, 12);
+}
+
 async function cacheGet(key) {
   const data = await chrome.storage.local.get(key);
   return data[key] ?? null;
@@ -38,6 +155,23 @@ async function cacheGet(key) {
 
 async function cacheSet(key, value) {
   await chrome.storage.local.set({ [key]: value });
+}
+
+// Storage only ever grew before: expired entries were ignored but never removed.
+// Runs on every service worker startup.
+async function pruneCache() {
+  try {
+    const all = await chrome.storage.local.get(null);
+    const now = Date.now();
+    const stale = Object.keys(all).filter((k) => {
+      if (k.startsWith(LEGACY_CACHE_PREFIX)) return true;
+      if (k.startsWith(CACHE_PREFIX)) return now - (all[k]?.ts ?? 0) >= CACHE_TTL_MS;
+      return false;
+    });
+    if (stale.length) await chrome.storage.local.remove(stale);
+  } catch (e) {
+    console.warn("ETF2L cache prune failed:", e);
+  }
 }
 
 function enqueue(fn) {
@@ -48,174 +182,20 @@ function enqueue(fn) {
 }
 
 function pumpQueue() {
+  const wait = pausedUntil - Date.now();
+  if (wait > 0) {
+    setTimeout(pumpQueue, wait + 50);
+    return;
+  }
+
   while (inFlight < CONCURRENCY && queue.length > 0) {
     const job = queue.shift();
     inFlight++;
     job.fn()
-      .then(job.resolve)
-      .catch(job.reject)
+      .then(job.resolve, job.reject)
       .finally(() => {
         inFlight--;
-        setTimeout(pumpQueue, 120);
+        setTimeout(pumpQueue, QUEUE_STEP_MS);
       });
   }
-}
-
-async function getBadgeForSteamId(steamId64, lobbyMode) {
-  const cacheKey = `etf2l:${steamId64}:${lobbyMode || "unknown"}`;
-  const cached = await cacheGet(cacheKey);
-
-  const now = Date.now();
-  if (cached && (now - cached.ts) < CACHE_TTL_MS) return cached.badge;
-
-  const badge = await enqueue(async () => {
-    const results = await fetchPlayerResults(steamId64, 20);
-    const best = pickBestDivisionFromResults(results, lobbyMode);
-    return best ? `ETF2L: ${best}` : "";
-  });
-
-  await cacheSet(cacheKey, { ts: now, badge });
-  return badge;
-}
-
-async function fetchPlayerResults(steamId64, limit = 20) {
-  const url = new URL(`${API_BASE}/player/${encodeURIComponent(steamId64)}/results`);
-  url.searchParams.set("limit", String(limit));
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: { "Accept": "application/json" }
-  });
-
-  if (!res.ok) {
-    return null;
-  }
-
-  const json = await res.json();
-  return json;
-}
-
-function pickBestDivisionFromResults(apiResponse, lobbyMode) {
-  if (!apiResponse) return null;
-
-  const items = extractResultItems(apiResponse);
-  if (!items.length) return null;
-
-  const mode = (lobbyMode || "").toLowerCase();
-
-  const filtered = items.filter((r) => matchesMode(r, mode));
-  const candidates = filtered.length ? filtered : items;
-
-  for (const r of candidates) {
-    const div =
-      extractDivisionDirect(r) ||
-      parseDivisionFromText(getCompetitionName(r) || "");
-    if (div) return div;
-  }
-
-  return null;
-}
-
-function extractResultItems(apiResponse) {
-  if (!apiResponse) return [];
-
-  if (Array.isArray(apiResponse)) return apiResponse;
-
-  const paths = [
-    ["results", "data"],
-    ["results"],
-    ["data"],
-    ["player_results", "data"],
-    ["player_results"]
-  ];
-
-  for (const p of paths) {
-    let cur = apiResponse;
-    for (const k of p) cur = cur?.[k];
-    if (Array.isArray(cur)) return cur;
-  }
-
-  return [];
-}
-
-function matchesMode(resultItem, mode) {
-  if (!mode) return true;
-
-  const name = (getCompetitionName(resultItem) || "").toLowerCase();
-  if (mode.includes("6")) return name.includes("6v6");
-  if (mode.includes("high")) return name.includes("highlander");
-  return true;
-}
-
-function getCompetitionName(resultItem) {
-  return (
-    resultItem?.competition?.name ||
-    resultItem?.competition?.description ||
-    resultItem?.competition_name ||
-    resultItem?.competition ||
-    ""
-  );
-}
-
-function extractDivisionDirect(resultItem) {
-  const candidates = [
-    resultItem?.division?.name,
-    resultItem?.division,
-    resultItem?.competition?.division?.name,
-    resultItem?.competition?.division,
-    resultItem?.tier
-  ];
-
-  for (const v of candidates) {
-    const div = normalizeDivisionValue(v);
-    if (div) return div;
-  }
-  return null;
-}
-
-function normalizeDivisionValue(v) {
-  if (!v) return null;
-
-  if (typeof v === "string" || typeof v === "number") {
-    return normalizeDivision(String(v));
-  }
-
-  if (typeof v === "object") {
-    const maybe =
-      v.name ?? v.title ?? v.division ?? v.tier ?? v.level ?? v.short ?? v.abbr;
-    if (maybe) return normalizeDivision(String(maybe));
-  }
-
-  return null;
-}
-
-function parseDivisionFromText(text) {
-  const t = text.toLowerCase();
-
-  if (t.includes("prem")) return "PREM";
-  if (t.includes("division 1") || t.includes("div 1") || t.includes("div1")) return "DIV1";
-  if (t.includes("division 2") || t.includes("div 2") || t.includes("div2")) return "DIV2";
-  if (t.includes("division 3") || t.includes("div 3") || t.includes("div3")) return "DIV3";
-  if (t.includes("division 4") || t.includes("div 4") || t.includes("div4")) return "DIV4";
-  if (t.includes("mid")) return "MID";
-  if (t.includes("low")) return "LOW";
-  if (t.includes("open")) return "OPEN";
-
-  return null;
-}
-
-function normalizeDivision(raw) {
-  const r = raw.trim().toLowerCase();
-  if (!r) return null;
-
-  if (r.startsWith("prem")) return "PREM";
-  if (r === "1" || r.includes("division 1") || r.includes("div1")) return "DIV1";
-  if (r === "2" || r.includes("division 2") || r.includes("div2")) return "DIV2";
-  if (r === "3" || r.includes("division 3") || r.includes("div3")) return "DIV3";
-  if (r === "4" || r.includes("division 4") || r.includes("div4")) return "DIV4";
-  if (r.includes("mid")) return "MID";
-  if (r.includes("low")) return "LOW";
-  if (r.includes("open")) return "OPEN";
-
-  return raw.toUpperCase();
 }
