@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-12
+
+### Changed
+
+- The career-best division is now computed from the player's **full ETF2L
+  match history** (all pages of `/player/{id}/results`) in addition to their
+  current teams. Previously only current teams counted, so the badge
+  disappeared as soon as a player left the team that earned it.
+- If the player's current teams already include a Premiership entry, the match
+  history is skipped entirely — nothing can beat tier 0.
+- Cache TTL raised from 6 to 24 hours to offset the extra API traffic; cached
+  results from previous versions are invalidated.
+- API requests are gentler (lower concurrency, larger spacing) and HTTP 429
+  responses are retried automatically after the `Retry-After` pause instead of
+  failing the lookup.
+
 ## [0.3.1] - 2026-06-12
 
 ### Fixed

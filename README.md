@@ -9,11 +9,11 @@ This is an unofficial community project. It is not affiliated with TF2Center or 
 ## Features
 
 * Shows ETF2L division badges on TF2Center lobby pages.
-* The badge is the player's career-best ETF2L division: the highest tier they ever played in **any** game mode (6v6, Highlander, ...). Only official league seasons count; cups are ignored.
+* The badge is the player's career-best ETF2L division: the highest tier they ever played in **any** game mode (6v6, Highlander, ...), computed from the player's full ETF2L match history plus their current teams. Only official league seasons count; cups are ignored.
 * Detects players by TF2Center profile links.
 * Extracts SteamID64 from player profile URLs.
 * Uses ETF2L API v2 (`/player/{steamid64}`).
-* Caches lookup results locally for 6 hours to reduce API requests. Errors and rate limits are never cached.
+* Caches lookup results locally for 24 hours to reduce API requests. Errors and rate limits are never cached.
 * Adds small colored badges next to player names.
 
 ---
@@ -283,7 +283,7 @@ This extension uses only local browser storage and ETF2L API requests.
 
 It does not require your Steam password, TF2Center password, ETF2L password, or any API key.
 
-Lookup results are cached locally for 6 hours; errors and API rate limits are never cached.
+Lookup results are cached locally for 24 hours; errors and API rate limits are never cached.
 
 ---
 
