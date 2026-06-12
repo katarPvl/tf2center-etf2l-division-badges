@@ -1,9 +1,12 @@
 {
   "manifest_version": 3,
   "name": "TF2Center ETF2L Division Badges (API v2)",
-  "version": "0.4.0",
-  "description": "Shows ETF2L division badges next to players on TF2Center lobbies (uses ETF2L API v2).",
+  "version": "0.5.0",
+  "description": "Shows ETF2L division badges and team win probability on TF2Center lobbies (uses ETF2L API v2).",
   "permissions": ["storage"],
+  "options_ui": {
+    "page": "options.html"
+  },
   "host_permissions": [
     "https://api-v2.etf2l.org/*"
   ],

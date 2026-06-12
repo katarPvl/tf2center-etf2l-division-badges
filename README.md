@@ -15,6 +15,8 @@ This is an unofficial community project. It is not affiliated with TF2Center or 
 * Uses ETF2L API v2 (`/player/{steamid64}`).
 * Caches lookup results locally for 24 hours to reduce API requests. Errors and rate limits are never cached.
 * Adds small colored badges next to player names.
+* Shows an estimated team win probability bar above the lobby teams, based on the recency-weighted ETF2L skill of each team's players.
+* The win probability can be turned off with the on-page toggle or on the extension options page. Badges are always shown.
 
 ---
 
@@ -38,6 +40,19 @@ This is an unofficial community project. It is not affiliated with TF2Center or 
 
 Players without ETF2L history get no badge.
 
+## Win probability
+
+The probability bar compares the average skill of the two teams. Each player's
+skill is a recency-weighted average of the `skill_contrib` value of the
+divisions they played in official ETF2L seasons (Premiership 28 ... Open 4,
+Fresh 0): a match's weight halves roughly every 18 months, so long-inactive
+achievements fade out. Players without ETF2L history count as newcomers
+(skill 0). The difference is converted to a probability with a logistic
+(Elo-style) curve.
+
+It is an estimate based on league history only — it knows nothing about
+classes, current form outside ETF2L, or teamwork.
+
 ## Supported pages
 
 The extension runs only on TF2Center lobby pages:
@@ -55,9 +70,11 @@ It does not run on the TF2Center lobby list page.
 
 ```text
 manifest.json      Extension manifest, permissions and content script config
-background.js      ETF2L API lookup, cache and background message handler
-contentScript.js   TF2Center page scanner and badge renderer
-styles.css         Badge styles
+background.js      ETF2L API lookup, skill rating, cache and message handler
+contentScript.js   TF2Center page scanner, badge and win probability renderer
+styles.css         Badge and win probability styles
+options.html       Extension options page
+options.js         Options page logic
 CHANGELOG.md       Release history
 ```
 
@@ -89,7 +106,9 @@ tf2center-etf2l-division-badges/
 ├── manifest.json
 ├── background.js
 ├── contentScript.js
-└── styles.css
+├── styles.css
+├── options.html
+└── options.js
 ```
 
 Wrong folder:
@@ -100,7 +119,9 @@ tf2center-etf2l-division-badges-main/
     ├── manifest.json
     ├── background.js
     ├── contentScript.js
-    └── styles.css
+    ├── styles.css
+    ├── options.html
+    └── options.js
 ```
 
 If the browser says that `manifest.json` is missing, you selected the wrong folder.
@@ -146,6 +167,8 @@ manifest.json
 background.js
 contentScript.js
 styles.css
+options.html
+options.js
 ```
 
 ---
@@ -196,7 +219,9 @@ tf2center-etf2l-division-badges/
 ├── manifest.json
 ├── background.js
 ├── contentScript.js
-└── styles.css
+├── styles.css
+├── options.html
+└── options.js
 ```
 
 Неправильно:
@@ -207,7 +232,9 @@ tf2center-etf2l-division-badges-main/
     ├── manifest.json
     ├── background.js
     ├── contentScript.js
-    └── styles.css
+    ├── styles.css
+    ├── options.html
+    └── options.js
 ```
 
 Если браузер пишет, что `manifest.json` не найден, значит выбрана не та папка.
@@ -253,6 +280,8 @@ manifest.json
 background.js
 contentScript.js
 styles.css
+options.html
+options.js
 ```
 
 ---

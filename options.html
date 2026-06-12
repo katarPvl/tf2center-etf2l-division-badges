@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TF2Center ETF2L Division Badges — Options</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      margin: 16px;
+      min-width: 320px;
+      color: #222;
+    }
+    h1 {
+      font-size: 16px;
+      margin: 0 0 12px;
+    }
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .hint {
+      margin: 6px 0 0 24px;
+      font-size: 12px;
+      color: #666;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { color: #ddd; background: #222; }
+      .hint { color: #999; }
+    }
+  </style>
+</head>
+<body>
+  <h1>TF2Center ETF2L Division Badges</h1>
+  <label>
+    <input type="checkbox" id="showWinProbability">
+    Show team win probability in lobbies
+  </label>
+  <p class="hint">
+    Estimated from the ETF2L history of the players in each team.
+    Division badges are always shown.
+  </p>
+  <script src="options.js"></script>
+</body>
+</html>

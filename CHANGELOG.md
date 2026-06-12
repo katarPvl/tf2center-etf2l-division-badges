@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-12
+
+### Added
+
+- **Team win probability**: a bar above the lobby teams estimates each team's
+  chance to win. Player skill is a recency-weighted average of the ETF2L
+  `skill_contrib` of divisions played in official seasons (a match's weight
+  halves every ~18 months, long-inactive achievements fade towards the
+  newcomer level); players without ETF2L history count as newcomers. Team
+  averages are compared with a logistic (Elo-style) curve.
+- The win probability can be disabled either with the toggle on the lobby page
+  or on the new extension options page; the setting syncs via
+  `chrome.storage.sync`. Division badges are always shown.
+
 ## [0.4.0] - 2026-06-12
 
 ### Changed
