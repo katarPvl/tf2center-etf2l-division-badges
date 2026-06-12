@@ -3,7 +3,7 @@ const SCAN_DEBOUNCE_MS = 500;
 const RETRY_DELAY_MS = 30 * 1000;
 const CHAT_SELECTOR = "#chat, .chat, .chatbox, .messages";
 const PROFILE_LINK_SELECTOR = 'a[href*="/profile/"], a[href*="steamcommunity.com/profiles/"]';
-const KNOWN_LEVELS = new Set(["prem", "high", "div1", "div2", "div3", "div4", "mid", "low", "open"]);
+const KNOWN_LEVELS = new Set(["prem", "high", "div1", "div2", "div3", "div4", "mid", "low", "open", "fresh"]);
 
 let scanTimer = null;
 let lastSentKey = "";

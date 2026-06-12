@@ -126,6 +126,7 @@ function normalizeDivision(raw) {
   if (r.startsWith("mid")) return "MID";
   if (r.startsWith("low")) return "LOW";
   if (r.startsWith("open")) return "OPEN";
+  if (r.startsWith("fresh")) return "FRESH";
 
   const m = r.match(/^div(?:ision)?\s*(\d)/);
   if (m) return `DIV${m[1]}`;

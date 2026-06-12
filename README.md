@@ -34,6 +34,7 @@ This is an unofficial community project. It is not affiliated with TF2Center or 
 | MID | Mid | blue |
 | LOW | Low | green |
 | OPEN | Open | gray |
+| FRESH | Fresh (newcomer bracket) | teal |
 
 Players without ETF2L history get no badge.
 

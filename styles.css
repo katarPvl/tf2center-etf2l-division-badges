@@ -22,3 +22,4 @@
 .etf2l-badge[data-level="mid"]  { border-color: rgba(80, 170, 255, 0.6); }
 .etf2l-badge[data-level="low"]  { border-color: rgba(120, 255, 120, 0.6); }
 .etf2l-badge[data-level="open"] { border-color: rgba(200, 200, 200, 0.6); }
+.etf2l-badge[data-level="fresh"] { border-color: rgba(110, 220, 200, 0.6); }

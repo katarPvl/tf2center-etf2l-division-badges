@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-06-12
+
+### Fixed
+
+- The **Fresh** division (newcomer bracket introduced in 6v6 Season 52) now has
+  a proper badge color; previously it was shown as an unstyled badge.
+
 ## [0.3.0] - 2026-06-11
 
 ### Changed
